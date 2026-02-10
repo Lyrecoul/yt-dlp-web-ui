@@ -11,7 +11,6 @@ import (
 	"log/slog"
 	"regexp"
 	"slices"
-	"syscall"
 
 	"os"
 	"os/exec"
@@ -114,7 +113,8 @@ func (p *Process) Start() {
 	slog.Info("requesting download", slog.String("url", p.Url), slog.Any("params", params))
 
 	cmd := exec.Command(config.Instance().DownloaderPath, params...)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessAttrs(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -265,23 +265,7 @@ func (p *Process) Kill() error {
 	defer func() {
 		p.Progress.Status = StatusCompleted
 	}()
-	// yt-dlp uses multiple child process the parent process
-	// has been spawned with setPgid = true. To properly kill
-	// all subprocesses a SIGTERM need to be sent to the correct
-	// process group
-	if p.proc == nil {
-		return errors.New("*os.Process not set")
-	}
-
-	pgid, err := syscall.Getpgid(p.proc.Pid)
-	if err != nil {
-		return err
-	}
-	if err := syscall.Kill(-pgid, syscall.SIGTERM); err != nil {
-		return err
-	}
-
-	return nil
+	return killProcess(p)
 }
 
 func (p *Process) GetFileName(o *DownloadOutput) error {
@@ -291,7 +275,8 @@ func (p *Process) GetFileName(o *DownloadOutput) error {
 		"-o", fmt.Sprintf("%s/%s", o.Path, o.Filename),
 		p.Url,
 	)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessAttrs(cmd)
 
 	out, err := cmd.Output()
 	if err != nil {
@@ -314,7 +299,8 @@ func (p *Process) SetPending() {
 
 func (p *Process) SetMetadata() error {
 	cmd := exec.Command(config.Instance().DownloaderPath, p.Url, "-J")
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	// cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	setProcessAttrs(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
